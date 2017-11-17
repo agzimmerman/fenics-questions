@@ -31,4 +31,6 @@ L = v*f*fenics.dx
 
 solution = fenics.Function(V)
 
+fenics.set_log_level(fenics.DEBUG)
+
 fenics.solve(a == L, solution, bc)
