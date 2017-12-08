@@ -77,7 +77,7 @@ def solve(W, w_n, bcs,
         prandtl_number = 0.71,
         solid_viscosity = 1.e-4,
         regularization_central_temperature = 0.1,
-        regularization_smoothing_factor = 0.025,
+        regularization_smoothing_parameter = 0.025,
         gravity = (0., -1.),
         time_step_geometric_growth_factor = 1.,
         adaptive_goal = "phase",
@@ -113,7 +113,7 @@ def solve(W, w_n, bcs,
 
     T_f = fenics.Constant(regularization_central_temperature)
     
-    r = fenics.Constant(regularization_smoothing_factor)
+    r = fenics.Constant(regularization_smoothing_parameter)
     
     def phi(T):
     
