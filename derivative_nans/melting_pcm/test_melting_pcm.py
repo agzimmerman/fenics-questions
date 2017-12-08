@@ -3,7 +3,7 @@ import fenics
 import melting_pcm
 
     
-def test_melting_pcm():
+def run(automatic_jacobian = True):
     """ Run the melting PCM problem."""
     
     
@@ -56,10 +56,23 @@ def test_melting_pcm():
             fenics.DirichletBC(function_space.sub(2), T_h, hot_wall),
             fenics.DirichletBC(function_space.sub(2), T_c, cold_wall)],
         time_step_size = 1.e-3,
-        end_time = 0.02)
+        end_time = 0.02,
+        automatic_jacobian = automatic_jacobian)
+    
+    
+def test_melting_pcm():
+
+    run(automatic_jacobian = False)
+
+    
+def test_melting_pcm_autoJ():
+
+    run(automatic_jacobian = True)    
     
     
 if __name__=="__main__":
 
     test_melting_pcm()
+    
+    test_melting_pcm_autoJ()
     

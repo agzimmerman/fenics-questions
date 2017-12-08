@@ -52,7 +52,8 @@ def solve(W, w_n, bcs,
         solid_viscosity = 1.e-4,
         regularization_central_temperature = 0.1,
         regularization_smoothing_factor = 0.025,
-        gravity = (0., -1.)):
+        gravity = (0., -1.),
+        automatic_jacobian = True):
     """ Construct and solve the variational problem."""
     psi_u, psi_p, psi_T = fenics.TestFunctions(W)
         
@@ -72,6 +73,8 @@ def solve(W, w_n, bcs,
     Ra = fenics.Constant(rayleigh_number)
     
     Pr = fenics.Constant(prandtl_number)
+    
+    Ste = fenics.Constant(stefan_number)
     
     g = fenics.Constant(gravity)
     
@@ -102,16 +105,59 @@ def solve(W, w_n, bcs,
         return P(T, mu_L, mu_S)
 
     
-    F = (-psi_p*div(u) - psi_p*gamma*p
+    F = (
+        -psi_p*div(u) - psi_p*gamma*p
         + 1./Delta_t*dot(psi_u, u - u_n) + dot(psi_u, dot(grad(u), u)) 
             + 2.*mu(T)*inner(sym(grad(psi_u)), sym(grad(u))) - div(psi_u)*p
             + dot(psi_u, T*Ra/(Pr*Re**2)*g)
         + 1./Delta_t*psi_T*(T - T_n) + dot(grad(psi_T), 1./Pr*grad(T) - T*u)
-        + 1./Delta_t*psi_T*(phi(T) - phi(T_n))
+        + 1./(Ste*Delta_t)*psi_T*(phi(T) - phi(T_n))
         )*fenics.dx
 
-    JF = jacobian = fenics.derivative(F, w, fenics.TrialFunction(W))
+    if automatic_jacobian:
     
+        JF = fenics.derivative(F, w, fenics.TrialFunction(W))
+        
+    else:
+    
+        delta_u, delta_p, delta_T = fenics.split(fenics.Function(W))
+        
+        def sech(theta):
+    
+            return 1./fenics.cosh(theta)
+    
+    
+        def dphi(T):
+    
+            return sech((T_f - T)/r)**2/(2.*r)
+        
+    
+        def dP(T, P_L, P_S):
+        
+            return (P_S - P_L)*dphi(T)
+            
+            
+        def dmu(T):
+    
+            return dP(T, mu_L, mu_S)
+        
+        
+        JF = (
+            -psi_p*div(delta_u) - gamma*psi_p*delta_p
+            + 1./Delta_t*dot(psi_u, delta_u)
+            + dot(psi_u, dot(grad(delta_u), u))
+            + dot(psi_u, dot(grad(u), delta_u))
+            - delta_p*div(psi_u)
+            + 2.*delta_T*dmu(T)*inner(sym(grad(u)), sym(grad(psi_u))) 
+            + 2.*mu(T)*inner(sym(grad(delta_u)), sym(grad(psi_u)))
+            + dot(psi_u, delta_T*Ra/(Pr*Re**2)*g)
+            + 1./Delta_t*psi_T*delta_T
+            - dot(grad(psi_T), T*delta_u)
+            - dot(grad(psi_T), delta_T*u)
+            + 1./Pr*dot(grad(psi_T), grad(delta_T))
+            + 1./(Ste*Delta_t)*psi_T*delta_T*dphi(T)
+            )*fenics.dx
+        
     problem = fenics.NonlinearVariationalProblem(F, w, bcs, JF)
 
     M = phi(T)*fenics.dx
