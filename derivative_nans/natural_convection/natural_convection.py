@@ -10,9 +10,9 @@ REYNOLDS_NUMBER = 1.
 
 DYNAMIC_VISCOSITY = 1.
 
-ADAPTIVE_TOLERANCE = 1.e-5
-
 STEADY_TOLERANCE = 1.e-8
+
+ADAPTIVE_GOAL_TOLERANCE = 1.e-5
 
 def mixed_element(ufl_cell):
     """ Make a mixed finite element, 
@@ -102,14 +102,14 @@ def solve(W, w_n, bcs,
         + 1./Delta_t*dot(psi_u, u - u_n) + dot(psi_u, dot(grad(u), u)) 
             + 2.*mu*inner(sym(grad(psi_u)), sym(grad(u))) - div(psi_u)*p
             + dot(psi_u, T*Ra/(Pr*Re**2)*g)
-        + 1./Delta_t*psi_T*(T - T_n) + dot(grad(psi_T), 1./Pr*grad(T) + T*u)
+        + 1./Delta_t*psi_T*(T - T_n) + dot(grad(psi_T), 1./Pr*grad(T) - T*u)
         )*fenics.dx
 
     JF = jacobian = fenics.derivative(F, w, fenics.TrialFunction(W))
     
     problem = fenics.NonlinearVariationalProblem(F, w, bcs, JF)
 
-    M = (Pr/Ra**0.5*u[0])**2*fenics.dx  # Goal for goal-oriented AMR
+    M = (Pr*u[0]/Ra**0.5)**2*fenics.dx
     
     solver = fenics.AdaptiveNonlinearVariationalSolver(problem, M)
     
@@ -117,11 +117,11 @@ def solve(W, w_n, bcs,
     
     with fenics.XDMFFile("output/solution.xdmf") as solution_file:
     
-        write_solution(solution_file, w, time)
+        write_solution(solution_file, w_n, time)
         
         for it in range(MAXIMUM_TIME_STEPS):
 
-            solver.solve(ADAPTIVE_TOLERANCE)
+            solver.solve(ADAPTIVE_GOAL_TOLERANCE)
     
             time += time_step_size
             

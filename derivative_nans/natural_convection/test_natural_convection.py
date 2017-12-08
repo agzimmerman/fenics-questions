@@ -30,7 +30,7 @@ def verify_against_wang2010(solution):
     
 def test_natural_convection():
     """ Verify against the reference solution from wang2010."""
-    coarse_mesh = fenics.UnitSquareMesh(4, 4)
+    coarse_mesh = fenics.UnitSquareMesh(2, 2)
     
     element = natural_convection.mixed_element(coarse_mesh.ufl_cell())
     
