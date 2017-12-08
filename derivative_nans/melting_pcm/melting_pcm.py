@@ -8,11 +8,15 @@ REYNOLDS_NUMBER = 1.
 
 DYNAMIC_VISCOSITY = 1.
 
-ADAPTIVE_GOAL_TOLERANCE = 1.e-4
-
 TIME_EPSILON = 1.e-8
 
 LIQUID_VISCOSITY = 1.
+
+MAX_NEWTON_ITERATIONS = 50
+
+NEWTON_RELAXATION_PARAMETER = 1.
+
+STEADY_TOLERANCE = 1.e-4
 
 def mixed_element(ufl_cell):
     """ Make a mixed finite element, 
@@ -43,6 +47,28 @@ def write_solution(solution_file, w, time):
         solution_file.write(var, time)
 
     
+def steady(w, w_n):
+    """Check if solution has reached an approximately steady state."""
+    steady = False
+    
+    time_residual = fenics.Function(w.function_space().leaf_node())
+    
+    time_residual.assign(w.leaf_node() - w_n.leaf_node())
+    
+    unsteadiness = fenics.norm(time_residual, "L2")/fenics.norm(w_n.leaf_node(), "L2")
+    
+    print("Unsteadiness (L2 norm of relative time residual), || w_{n+1} || / || w_n || = "
+        + str(unsteadiness))
+
+    if (unsteadiness < STEADY_TOLERANCE):
+        
+        steady = True
+        
+        print("Reached steady state.")
+    
+    return steady
+    
+    
 def solve(W, w_n, bcs, 
         time_step_size = 1.e-3,
         end_time = 0.02,
@@ -53,6 +79,9 @@ def solve(W, w_n, bcs,
         regularization_central_temperature = 0.1,
         regularization_smoothing_factor = 0.025,
         gravity = (0., -1.),
+        time_step_geometric_growth_factor = 1.,
+        adaptive_goal = "phase",
+        adaptive_goal_tolerance = 1.e-4,
         automatic_jacobian = True):
     """ Construct and solve the variational problem."""
     psi_u, psi_p, psi_T = fenics.TestFunctions(W)
@@ -104,23 +133,49 @@ def solve(W, w_n, bcs,
     
         return P(T, mu_L, mu_S)
 
+        
+    def b(u, q):
+    
+        return -div(u)*q
+
+    
+    def D(u):
+    
+        return sym(grad(u))  # Symmetric part of velocity gradient
+    
+    
+    def a(mu, u, v):
+        
+        return 2.*mu*inner(D(u), D(v))  # Stokes stress-strain
+    
+    
+    def c(w, z, v):
+        
+        return dot(dot(grad(z), w), v) # Convection of the velocity field
+    
+    
+    def f_B(T):
+    
+        return T*Ra/(Pr*Re**2)*g
     
     F = (
-        -psi_p*div(u) - psi_p*gamma*p
-        + 1./Delta_t*dot(psi_u, u - u_n) + dot(psi_u, dot(grad(u), u)) 
-            + 2.*mu(T)*inner(sym(grad(psi_u)), sym(grad(u))) - div(psi_u)*p
-            + dot(psi_u, T*Ra/(Pr*Re**2)*g)
+        b(u, psi_p) - psi_p*gamma*p
+        + 1./Delta_t*dot(psi_u, u - u_n) + c(u, u, psi_u) + a(mu(T), u, psi_u) + b(psi_u, p)
+        + dot(psi_u, f_B(T))
         + 1./Delta_t*psi_T*(T - T_n) + dot(grad(psi_T), 1./Pr*grad(T) - T*u)
-        + 1./(Ste*Delta_t)*psi_T*(phi(T) - phi(T_n))
+        - 1./(Ste*Delta_t)*psi_T*(phi(T) - phi(T_n))
         )*fenics.dx
 
+        
+    delta_w = fenics.TrialFunction(W)
+    
     if automatic_jacobian:
     
-        JF = fenics.derivative(F, w, fenics.TrialFunction(W))
+        JF = fenics.derivative(F, w, delta_w)
         
     else:
     
-        delta_u, delta_p, delta_T = fenics.split(fenics.Function(W))
+        delta_u, delta_p, delta_T = fenics.split(delta_w)
         
         def sech(theta):
     
@@ -129,7 +184,7 @@ def solve(W, w_n, bcs,
     
         def dphi(T):
     
-            return sech((T_f - T)/r)**2/(2.*r)
+            return -sech((T_f - T)/r)**2/(2.*r)
         
     
         def dP(T, P_L, P_S):
@@ -142,30 +197,46 @@ def solve(W, w_n, bcs,
             return dP(T, mu_L, mu_S)
         
         
+        def df_B(T):
+    
+            return Ra/(Pr*Re**2)*g
+        
+        
         JF = (
-            -psi_p*div(delta_u) - gamma*psi_p*delta_p
+            b(delta_u, psi_p) - gamma*psi_p*delta_p
             + 1./Delta_t*dot(psi_u, delta_u)
-            + dot(psi_u, dot(grad(delta_u), u))
-            + dot(psi_u, dot(grad(u), delta_u))
-            - delta_p*div(psi_u)
-            + 2.*delta_T*dmu(T)*inner(sym(grad(u)), sym(grad(psi_u))) 
-            + 2.*mu(T)*inner(sym(grad(delta_u)), sym(grad(psi_u)))
-            + dot(psi_u, delta_T*Ra/(Pr*Re**2)*g)
+            + c(u, delta_u, psi_u) + c(delta_u, u, psi_u)
+            + b(psi_u, delta_p)
+            + a(delta_T*dmu(T), u, psi_u) + a(mu(T), delta_u, psi_u)
+            + dot(psi_u, delta_T*df_B(T))
             + 1./Delta_t*psi_T*delta_T
             - dot(grad(psi_T), T*delta_u)
             - dot(grad(psi_T), delta_T*u)
             + 1./Pr*dot(grad(psi_T), grad(delta_T))
-            + 1./(Ste*Delta_t)*psi_T*delta_T*dphi(T)
+            - 1./(Ste*Delta_t)*psi_T*delta_T*dphi(T)
             )*fenics.dx
         
     problem = fenics.NonlinearVariationalProblem(F, w, bcs, JF)
 
-    M = phi(T)*fenics.dx
+    if adaptive_goal == "phase":
+    
+        M = phi(T)*fenics.dx
+        
+    elif adaptive_goal == "horizontal_velocity":
+    
+        M = (Pr/Ra**0.5*u[0])**2*fenics.dx 
+        
+    else:
+    
+        assert(False)
     
     solver = fenics.AdaptiveNonlinearVariationalSolver(problem, M)
     
     solver.parameters["nonlinear_variational_solver"]["newton_solver"]\
-        ["maximum_iterations"] = 10
+        ["maximum_iterations"] = MAX_NEWTON_ITERATIONS
+        
+    solver.parameters["nonlinear_variational_solver"]["newton_solver"]\
+        ["relaxation_parameter"] = NEWTON_RELAXATION_PARAMETER
     
     time = 0.
     
@@ -175,7 +246,7 @@ def solve(W, w_n, bcs,
         
         while (time < (end_time - TIME_EPSILON)):
 
-            solver.solve(ADAPTIVE_GOAL_TOLERANCE)
+            solver.solve(adaptive_goal_tolerance)
     
             time += time_step_size
             
@@ -183,6 +254,16 @@ def solve(W, w_n, bcs,
             
             write_solution(solution_file, w, time)
             
+            if steady(w, w_n):
+            
+                break
+            
             w_n.leaf_node().vector()[:] = w.leaf_node().vector() # Reset initial values.
+            
+            
+            # Update the time step size.
+            time_step_size *= time_step_geometric_growth_factor
+            
+            Delta_t.assign(time_step_size)
 
     return w

@@ -48,7 +48,7 @@ def run(automatic_jacobian = True):
         w_n = fenics.interpolate(
             fenics.Expression(
                 ("0.", "0.", "0.", 
-                    "(" + str(T_h) + " - " + str(T_c) + ")*" + hot_wall + " " + str(T_c)), 
+                    "(" + str(T_h) + " - " + str(T_c) + ")*(x[0] < 0.001) +  " + str(T_c)), 
                 element=element),
             function_space),
         bcs = [
