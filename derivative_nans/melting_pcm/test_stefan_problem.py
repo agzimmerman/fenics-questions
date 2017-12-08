@@ -121,6 +121,28 @@ def test_stefan_problem_Ste1_autoJ():
     
     verify_pci_position(solution=solution, true_pci_position = 0.076, tolerance = 1.e-3)
     
+   
+def test_stefan_problem_Ste0p1():
+
+    solution = run(stefan_number = 0.1,
+        time_step_size = 1.e-4,
+        regularization_central_temperature = 0.,
+        regularization_smoothing_parameter = 0.01,
+        automatic_jacobian = False)
+
+    verify_pci_position(solution=solution, true_pci_position = 0.038, tolerance = 1.e-3)
+    
+    
+def test_stefan_problem_Ste0p1_autoJ():
+
+    solution = run(stefan_number = 0.1,
+        time_step_size = 1.e-4,
+        regularization_central_temperature = 0.,
+        regularization_smoothing_parameter = 0.01,
+        automatic_jacobian = True)   
+    
+    verify_pci_position(solution=solution, true_pci_position = 0.038, tolerance = 1.e-3)   
+
     
 if __name__=="__main__":
 
@@ -128,3 +150,6 @@ if __name__=="__main__":
     
     test_stefan_problem_Ste1_autoJ()
     
+    test_stefan_problem_Ste0p1_pcm()
+    
+    test_stefan_problem_Ste0p1_autoJ()
