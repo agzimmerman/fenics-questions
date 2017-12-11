@@ -57,22 +57,29 @@ def run(automatic_jacobian = True):
             fenics.DirichletBC(function_space.sub(2), T_c, cold_wall)],
         time_step_size = 1.e-3,
         end_time = 0.02,
+        rayleigh_number = 1.e6,
+        stefan_number = 1.,
+        prandtl_number = 0.71,
+        solid_viscosity = 1.e-4,
+        regularization_central_temperature = 0.1,
+        regularization_smoothing_parameter = 0.025,
+        adaptive_goal_tolerance = 1.e-4,
         automatic_jacobian = automatic_jacobian)
     
     
-def test_melting_pcm():
+def test_melting_toy_pcm():
 
     run(automatic_jacobian = False)
 
     
-def test_melting_pcm_autoJ():
+def test_melting_toy_pcm_autoJ():
 
     run(automatic_jacobian = True)    
     
     
 if __name__=="__main__":
 
-    test_melting_pcm()
+    test_melting_toy_pcm()
     
-    test_melting_pcm_autoJ()
+    test_melting_toy_pcm_autoJ()
     
